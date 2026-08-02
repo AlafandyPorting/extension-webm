@@ -18,6 +18,9 @@ jobs:
           - platform: windows
             os: windows-latest
             target: windows
+          - platform: windows64
+            os: windows-latest
+            target: windows -64
           - platform: linux
             os: ubuntu-latest
             target: linux
@@ -44,7 +47,14 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Haxe
+        if: (matrix.platform == 'android' || matrix.platform == 'windows' || matrix.platform == 'windows64' || matrix.platform == 'linux' || matrix.platform == 'linux64')
         uses: krdlab/setup-haxe@v1
+        with:
+          haxe-version: 4.3.6
+
+      - name: Setup Haxe
+        if: (matrix.platform == 'ios' || matrix.platform == 'mac' || matrix.platform == 'mac64')
+        uses: krdlab/setup-haxe@master
         with:
           haxe-version: 4.3.6
 
@@ -55,6 +65,13 @@ jobs:
         with:
           ndk-version: r21c
           add-to-path: false
+
+      - name: Install 32-bit Dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib g++-multilib
 
       - name: Install Haxe Dependencies
         run: |
@@ -111,6 +128,7 @@ jobs:
           
           git add ndll/
           git status
+          
           if git diff --staged --quiet; then
             echo "No changes in NDLL binaries to commit."
           else
