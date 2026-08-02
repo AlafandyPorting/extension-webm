@@ -82,10 +82,10 @@ jobs:
       - name: Install Haxe Dependencies
         run: |
           haxelib setup ~/haxelib
-          haxelib install lime
-          haxelib install openfl
-          haxelib install hxcpp
-          haxelib run lime setup -y
+          haxelib install lime --quiet
+          haxelib install openfl --quiet
+          haxelib install hxcpp --quiet
+          haxelib run lime setup -y --quiet
 
       - name: Configure Android
         if: matrix.platform == 'android'
