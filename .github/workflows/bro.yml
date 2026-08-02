@@ -24,7 +24,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Haxe
+        if: matrix.platform == 'android'
         uses: krdlab/setup-haxe@v1
+        with:
+          haxe-version: 4.3.6
+
+      - name: Setup Haxe
+        if: matrix.platform == 'ios'
+        uses: krdlab/setup-haxe@master
         with:
           haxe-version: 4.3.6
 
