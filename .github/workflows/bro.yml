@@ -28,16 +28,16 @@ jobs:
             os: ubuntu-latest
             target: linux -64
           - platform: mac
-            os: macos-latest
+            os: macos-15
             target: mac
           - platform: mac64
-            os: macos-latest
+            os: macos-15
             target: mac -64
           - platform: android
             os: ubuntu-latest
             target: android
           - platform: ios
-            os: macos-latest
+            os: macos-15
             target: ios
 
     steps:
@@ -57,6 +57,12 @@ jobs:
         uses: krdlab/setup-haxe@master
         with:
           haxe-version: 4.3.6
+
+      - name: Select Xcode Path
+        if: matrix.platform == 'mac' || matrix.platform == 'mac64' || matrix.platform == 'ios'
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app
+          sudo xcodebuild -runFirstLaunch
 
       - name: Setup Android NDK
         if: matrix.platform == 'android'
@@ -91,7 +97,7 @@ jobs:
 
       - name: Rebuild NDLL
         run: |
-          lime rebuild . ${{ matrix.target }}
+          haxelib run lime rebuild . ${{ matrix.target }}
 
       - name: Upload Artifacts (Backup)
         uses: actions/upload-artifact@v4
