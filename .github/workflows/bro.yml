@@ -1,0 +1,53 @@
+name: Build Mobile NDLLs
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    name: Build for ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        include:
+          - platform: android
+            os: ubuntu-latest
+          - platform: ios
+            os: macos-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Haxe
+        uses: krdlab/setup-haxe@v1
+        with:
+          haxe-version: 4.3.6
+
+      - name: Install Haxe Dependencies
+        run: |
+          haxelib setup ~/haxelib
+          haxelib install lime
+          haxelib install openfl
+          haxelib install hxcpp
+          haxelib run lime setup -y
+
+      - name: Rebuild Android NDLL
+        if: matrix.platform == 'android'
+        run: |
+          lime rebuild . android
+
+      - name: Rebuild iOS NDLL
+        if: matrix.platform == 'ios'
+        run: |
+          lime rebuild . ios
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndll-${{ matrix.platform }}
+          path: ndll/
