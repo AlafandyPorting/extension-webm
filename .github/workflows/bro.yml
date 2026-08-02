@@ -1,4 +1,4 @@
-name: Build Mobile NDLLs
+name: Build All Platform NDLLs
 
 on:
   push:
@@ -12,26 +12,39 @@ jobs:
     runs-on: ${{ matrix.os }}
     
     strategy:
+      fail-fast: false
       matrix:
         include:
+          - platform: windows
+            os: windows-latest
+            target: windows
+          - platform: linux
+            os: ubuntu-latest
+            target: linux
+          - platform: linux64
+            os: ubuntu-latest
+            target: linux -64
+          - platform: mac
+            os: macos-latest
+            target: mac
+          - platform: mac64
+            os: macos-latest
+            target: mac -64
           - platform: android
             os: ubuntu-latest
+            target: android
           - platform: ios
             os: macos-latest
+            target: ios
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
-      - name: Setup Haxe
-        if: matrix.platform == 'android'
-        uses: krdlab/setup-haxe@v1
         with:
-          haxe-version: 4.3.6
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Haxe
-        if: matrix.platform == 'ios'
-        uses: krdlab/setup-haxe@master
+        uses: krdlab/setup-haxe@v1
         with:
           haxe-version: 4.3.6
 
@@ -59,18 +72,48 @@ jobs:
           haxelib run lime config JAVA_HOME $JAVA_HOME_17_X64
           haxelib run lime config ANDROID_SETUP true
 
-      - name: Rebuild Android NDLL
-        if: matrix.platform == 'android'
+      - name: Rebuild NDLL
         run: |
-          lime rebuild . android
+          lime rebuild . ${{ matrix.target }}
 
-      - name: Rebuild iOS NDLL
-        if: matrix.platform == 'ios'
-        run: |
-          lime rebuild . ios
-
-      - name: Upload Artifacts
+      - name: Upload Artifacts (Backup)
         uses: actions/upload-artifact@v4
         with:
           name: ndll-${{ matrix.platform }}
           path: ndll/
+
+  commit-ndlls:
+    name: Commit NDLLs to Repository
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download All Platform Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded-ndlls
+
+      - name: Organize Artifacts into Root NDLL Folder
+        run: |
+          mkdir -p ndll
+          cp -r downloaded-ndlls/ndll-*/* ndll/ || true
+          ls -R ndll/
+
+      - name: Auto-Commit and Push Binaries
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add ndll/
+          git status
+          if git diff --staged --quiet; then
+            echo "No changes in NDLL binaries to commit."
+          else
+            git commit -m "chore: auto-update compiled platform ndll binaries [skip ci]"
+            git push
+          fi
