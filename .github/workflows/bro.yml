@@ -35,6 +35,14 @@ jobs:
         with:
           haxe-version: 4.3.6
 
+      - name: Setup Android NDK
+        if: matrix.platform == 'android'
+        id: setup-ndk
+        uses: nttld/setup-ndk@main
+        with:
+          ndk-version: r21c
+          add-to-path: false
+
       - name: Install Haxe Dependencies
         run: |
           haxelib setup ~/haxelib
@@ -42,6 +50,14 @@ jobs:
           haxelib install openfl
           haxelib install hxcpp
           haxelib run lime setup -y
+
+      - name: Configure Android
+        if: matrix.platform == 'android'
+        run: |
+          haxelib run lime config ANDROID_SDK $ANDROID_HOME
+          haxelib run lime config ANDROID_NDK_ROOT ${{ steps.setup-ndk.outputs.ndk-path }}
+          haxelib run lime config JAVA_HOME $JAVA_HOME_17_X64
+          haxelib run lime config ANDROID_SETUP true
 
       - name: Rebuild Android NDLL
         if: matrix.platform == 'android'
