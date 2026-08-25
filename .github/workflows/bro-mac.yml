@@ -1,51 +1,179 @@
-name: Build MacOS NDLL
+name: Build MacOS NDLLs
 
 on:
-  push:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  build-macos:
+    name: Build ${{ matrix.name }}
+    runs-on: macos-14
+
     strategy:
       fail-fast: false
       matrix:
         include:
+          # Intel macOS
           - name: Mac
-            arch: x86_64
-            args: "-64"
-          - name: Mac64
-            arch: arm64
-            args: "-DHXCPP_ARM64"
+            architecture: x86_64
+            define: HXCPP_M64
+            output: ndll/Mac
 
-    runs-on: macos-latest
+          # Apple Silicon macOS
+          - name: Mac64
+            architecture: arm64
+            define: HXCPP_ARM64
+            output: ndll/Mac64
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v6
         with:
-          submodules: recursive
+          fetch-depth: 0
 
       - name: Setup Haxe
         uses: krdlab/setup-haxe@v1
         with:
           haxe-version: "4.3.7"
 
-      - name: Install dependencies
+      - name: Setup Haxelib
         run: |
           haxelib setup ~/haxelib
+
+      - name: Install dependencies
+        run: |
           haxelib install hxcpp
           haxelib install lime
+          haxelib list
 
-      - name: Build
+      - name: Install extension-webm as development library
         run: |
-          lime rebuild mac ${{ matrix.args }}
+          haxelib dev extension-webm "$GITHUB_WORKSPACE"
 
-      - name: Check NDLL
+      - name: Show project
         run: |
-          find ndll -type f -print
-          find ndll -name "*.ndll" -exec file {} \;
+          echo "Repository:"
+          pwd
+          echo
+          echo "Files:"
+          find . -maxdepth 3 -type f | sort | head -300
 
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: extension-webm-${{ matrix.name }}
-          path: ndll/
+      - name: Build NDLL - ${{ matrix.name }}
+        shell: bash
+        run: |
+          set -e
+
+          echo "Building ${{ matrix.architecture }}"
+          echo "HXCPP define: ${{ matrix.define }}"
+
+          if [ -f "project/Build.xml" ]; then
+            haxelib run hxcpp project/Build.xml -D${{ matrix.define }}
+          elif [ -f "Build.xml" ]; then
+            haxelib run hxcpp Build.xml -D${{ matrix.define }}
+          elif [ -f "project.xml" ]; then
+            lime rebuild mac -release -D${{ matrix.define }}
+          else
+            echo "::error::Could not find Build.xml or project.xml"
+            exit 1
+          fi
+
+      - name: Find generated NDLL
+        shell: bash
+        run: |
+          echo "Searching for NDLL files..."
+
+          find . \
+            -type f \
+            -name "*.ndll" \
+            -not -path "./ndll/*" \
+            -print
+
+      - name: Verify architecture
+        shell: bash
+        run: |
+          set -e
+
+          FOUND=0
+
+          while IFS= read -r file; do
+            FOUND=1
+
+            echo
+            echo "Checking:"
+            echo "$file"
+
+            file "$file"
+
+            if [ "${{ matrix.architecture }}" = "x86_64" ]; then
+              file "$file" | grep -E "x86_64|x86-64"
+            elif [ "${{ matrix.architecture }}" = "arm64" ]; then
+              file "$file" | grep -E "arm64|ARM64"
+            fi
+          done < <(
+            find . \
+              -type f \
+              -name "*.ndll" \
+              -not -path "./ndll/*"
+          )
+
+          if [ "$FOUND" = "0" ]; then
+            echo "::error::No NDLL was generated."
+            exit 1
+          fi
+
+      - name: Prepare ndll/${{ matrix.name }}
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p "${{ matrix.output }}"
+
+          # Remove old generated NDLLs for this architecture.
+          find "${{ matrix.output }}" \
+            -type f \
+            -name "*.ndll" \
+            -delete 2>/dev/null || true
+
+          # Copy newly generated NDLLs.
+          find . \
+            -type f \
+            -name "*.ndll" \
+            -not -path "./ndll/*" \
+            -exec cp {} "${{ matrix.output }}/" \;
+
+          echo
+          echo "Result:"
+          find "${{ matrix.output }}" -type f -print
+
+          if ! find "${{ matrix.output }}" \
+            -type f \
+            -name "*.ndll" \
+            | grep -q .; then
+            echo "::error::No NDLL was copied to ${{ matrix.output }}"
+            exit 1
+          fi
+
+      - name: Commit generated NDLL
+        shell: bash
+        run: |
+          set -e
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "${{ matrix.output }}"
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit \
+            -m "build: update macOS ${{ matrix.name }} NDLL"
+
+          git push
