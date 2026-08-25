@@ -1,0 +1,51 @@
+name: Build MacOS NDLL
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Mac
+            arch: x86_64
+            args: "-64"
+          - name: Mac64
+            arch: arm64
+            args: "-DHXCPP_ARM64"
+
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Haxe
+        uses: krdlab/setup-haxe@v1
+        with:
+          haxe-version: "4.3.7"
+
+      - name: Install dependencies
+        run: |
+          haxelib setup ~/haxelib
+          haxelib install hxcpp
+          haxelib install lime
+
+      - name: Build
+        run: |
+          lime rebuild mac ${{ matrix.args }}
+
+      - name: Check NDLL
+        run: |
+          find ndll -type f -print
+          find ndll -name "*.ndll" -exec file {} \;
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-webm-${{ matrix.name }}
+          path: ndll/
